@@ -94,6 +94,13 @@ create_s3_buckets() {
 	for department in "${departments[@]}"; do
 		bucket_name="${company}-${department}-data-bucket"
 
+	# Check if bucket already exists
+	
+	if aws s3api head-bucket --bucket "$bucket_name" &>/dev/null; then
+		echo "S3 bucket "$bucket_name" already exist."
+
+	else
+
 	# Create S3 bucket using AWS cli
 	
 	aws s3api create-bucket \
@@ -106,6 +113,8 @@ create_s3_buckets() {
 	else
 	
 		echo "Failed to create S3 bucket '$bucket_name'."
+
+	fi
 
 	fi
 
