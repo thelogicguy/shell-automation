@@ -50,34 +50,135 @@ check_aws_profile() {
 
 create_ec2_instances() {
 
-	# Specify the parameter for ec2 instances
-	
-	instance_type="t2.micro"
-	ami_id="ami-04a81a99f5ec58529"
-	count=2 # Number of instances to create
-	region="us-east-1"
+    count=2 # Number of instances to create
+    region="us-east-1"
 
-	# Create the EC2 instances
-	
-	aws ec2 run-instances \
-		--image-id "$ami_id" \
-		--instance-type "$instance_type" \
-		--count $count \
-		--key-name "darey.io" \
-		--region $region
+    # AMI IDs for different OS types
 
-	# Check if the ec2 instances were created sucessfully.
-	
-	if [ $? -eq 0 ]; then
+    ami_amazon_linux="ami-0abcdef1234567890" # Replace with actual Amazon Linux AMI ID
+    ami_ubuntu="ami-0abcdef1234567891"       # Replace with actual Ubuntu AMI ID
+    ami_centos="ami-0abcdef1234567892"       # Replace with actual CentOS AMI ID
+    instance_type="t2.micro" # Example instance type, replace with actual type
 
-		echo "EC2 instances created successfully."
+     # User data script to install Apache on Amazon Linux
+    user_data_amazon_linux="#!/bin/bash
+    yum update -y
+    yum install -y httpd
+    systemctl start httpd
+    systemctl enable httpd"
 
-	else
-		echo "Failed to create ec2 instances."
+    # User data script to install Apache on Ubuntu
+    user_data_ubuntu="#!/bin/bash
+    apt-get update
+    apt-get install -y apache2
+    systemctl start apache2
+    systemctl enable apache2"
 
-	fi
+    # User data script to install Apache on CentOS
+    user_data_centos="#!/bin/bash
+    yum update -y
+    yum install -y httpd
+    systemctl start httpd
+    systemctl enable httpd"
 
+    # Create Amazon Linux instances
+
+    aws ec2 run-instances \
+        --image-id "$ami_amazon_linux" \
+        --instance-type "$instance_type" \
+        --count $count \
+        --key-name "darey.io.pem" \
+	--security-group-ids sg-0b0384b66d7d692f9 \ # Replace with actual security group
+        --region $region
+    	--user-data "$user_data_amazon_linux"
+
+    if [ $? -eq 0 ]; then
+
+        echo "Amazon Linux EC2 instances created successfully."
+
+    else
+
+        echo "Failed to create Amazon Linux EC2 instances."
+
+    fi
+
+    # Create Ubuntu instances
+
+    aws ec2 run-instances \
+        --image-id "$ami_ubuntu" \
+        --instance-type "$instance_type" \
+        --count $count \
+        --key-name "darey.io.pem" \
+	--security-group-ids sg-0b0384b66d7d692f9 \ # Replace with actual securiy group
+        --region $region
+    	--user-data "$user_data_ubuntu"
+
+    if [ $? -eq 0 ]; then
+
+        echo "Ubuntu EC2 instances created successfully."
+
+    else
+
+        echo "Failed to create Ubuntu EC2 instances."
+
+    fi
+
+
+    # Create CentOS instances
+
+    aws ec2 run-instances \
+        --image-id "$ami_centos" \
+        --instance-type "$instance_type" \
+        --count $count \
+        --key-name "darey.io.pem" \
+	--security-group-ids sg-0b0384b66d7d692f9 \ # Replace with actual security group
+        --region $region
+    	--user-data "$user_data_centos"
+
+    if [ $? -eq 0 ]; then
+
+        echo "CentOS EC2 instances created successfully."
+
+    else
+
+        echo "Failed to create CentOS EC2 instances."
+
+    fi
 }
+
+
+# Function to verify Apache service status on instances
+
+verify_apache_status() {
+
+    instance_ids=$(aws ec2 describe-instances --query 'Reservations[*].Instances[*].InstanceId' --output text)
+
+    for instance_id in $instance_ids; do
+        public_dns=$(aws ec2 describe-instances --instance-ids $instance_id --query 'Reservations[*].Instances[*].PublicDnsName' --output text)
+
+        ssh -o StrictHostKeyChecking=no -i "darey.io.pem" ec2-user@$public_dns "systemctl status httpd" &>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "Apache is running on Amazon Linux instance $instance_id"
+        else
+            echo "Apache is not running on Amazon Linux instance $instance_id"
+        fi
+
+        ssh -o StrictHostKeyChecking=no -i "darey.io.pem" ubuntu@$public_dns "systemctl status apache2" &>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "Apache is running on Ubuntu instance $instance_id"
+        else
+            echo "Apache is not running on Ubuntu instance $instance_id"
+        fi
+
+        ssh -o StrictHostKeyChecking=no -i "darey.io.pem" centos@$public_dns "systemctl status httpd" &>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "Apache is running on CentOS instance $instance_id"
+        else
+            echo "Apache is not running on CentOS instance $instance_id"
+        fi
+    done
+}
+
 
 # Function to create s3 buckets for different departments
 
@@ -122,6 +223,97 @@ create_s3_buckets() {
 
 }
 
+# Function to create users
+
+create_iam_users() {
+
+    # Creating an array of names for new employees
+
+    new_employees=("Emmanuel" "Ayanfe" "Oyindamola" "Okeogene" "Wale")
+
+    for employee in "${new_employees[@]}"; do
+
+        if aws iam get-user --user-name "$employee" &>/dev/null; then
+
+            echo "Username '$employee' already exists. Kindly replace with a unique username."
+
+        else
+
+            aws iam create-user --user-name "$employee"
+
+            if [ $? -eq 0 ]; then
+
+                echo "User '$employee' created successfully."
+
+            else
+
+                echo "Failed to create user '$employee'."
+
+            fi
+
+        fi
+
+    done
+}
+
+# Function to create group
+
+create_iam_group() {
+
+    aws iam create-group --group-name "admin"
+
+    if [ $? -eq 0 ]; then
+
+        echo "'Admin Group' created successfully."
+
+    else
+
+        echo "Failed to create 'Admin Group'."
+
+    fi
+}
+
+# Function to attach policy to group
+
+attach_policy() {
+
+    aws iam attach-group-policy --group-name "admin" --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
+
+    if [ $? -eq 0 ]; then
+
+        echo "Successfully created and attached 'Administrator Policy' to 'Admin Group'."
+
+    else
+
+        echo "Failed to attach 'Administrator Policy'."
+
+    fi
+}
+
+# Function to assign users to admin group
+
+assign_to_group() {
+
+    users=("Emmanuel" "Ayanfe" "Oyindamola" "Okeogene" "Wale")
+
+    for user in "${users[@]}"; do
+
+        aws iam add-user-to-group --user-name "$user" --group-name "admin"
+
+        if [ $? -eq 0 ]; then
+
+            echo "Successfully assigned user '$user' to group."
+
+        else
+
+            echo "Failed to assign user '$user' to group."
+
+        fi
+
+    done
+}
+
+
 # Accessing the first argument
 ENVIRONMENT=$1
 
@@ -130,4 +322,9 @@ activate_infra_environment
 check_aws_cli
 check_aws_profile
 create_ec2_instances
+verify_apache_status
 create_s3_buckets
+create_iam_users
+create_iam_group
+attach_policy
+assign_to_group
